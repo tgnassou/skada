@@ -5,6 +5,7 @@
 import torch
 import torch.nn.functional as F
 from skorch.callbacks import Callback
+from skorch.dataset import unpack_data
 
 from skada.deep.utils import SphericalKMeans
 
@@ -86,7 +87,7 @@ class ComputeMemoryBank(Callback):
         super().__init__()
         self.momentum = momentum
 
-    def on_epochs_end(self, net, dataset_train=None, **kwargs):
+    def on_batch_end(self, net, batch=None, training=False, **kwargs):
         """Compute memory bank at the end of each epoch.
 
         Parameters
@@ -98,33 +99,70 @@ class ComputeMemoryBank(Callback):
         **kwargs : dict
             Additional arguments passed to the callback.
         """
-        X, _ = dataset_train.X, dataset_train.y
+        X, y = unpack_data(batch)
+        batch_indices = X["indices"][X["sample_domain"] < 0]
 
-        X, _ = net._prepare_input(X)
         X_t = X["X"][X["sample_domain"] < 0]
 
-        net.eval()
+        memory_features = net.criterion__adapt_criterion.memory_features
+        memory_outputs = net.criterion__adapt_criterion.memory_outputs
+
+        net.module_.eval()
         with torch.no_grad():
-            output_t, features_t = net.module(X_t, return_features=True)
+            output_t, features_t = net.module_(X_t, return_features=True)
             features_t = F.normalize(features_t, p=2, dim=1)
             softmax_out = F.softmax(output_t, dim=1)
             outputs_target = softmax_out**2 / ((softmax_out**2).sum(dim=0))
 
-            if net.criterion__adapt_criterion.memory_features is None:
-                memory_features = torch.rand_like(features_t)
-            else:
-                memory_features = net.criterion__adapt_criterion.memory_features
+            new_memory_features = (1.0 - self.momentum) * memory_features[
+                batch_indices
+            ] + self.momentum * features_t.clone()
 
-            if net.criterion__adapt_criterion.memory_outputs is None:
-                memory_outputs = torch.rand_like(outputs_target)
-            else:
-                memory_outputs = net.criterion__adapt_criterion.memory_outputs
+            new_memory_outputs = (1.0 - self.momentum) * memory_outputs[
+                batch_indices
+            ] + self.momentum * outputs_target.clone()
 
-            new_memory_features = (1.0 - self.momentum) * memory_features
-            +self.momentum * features_t.clone()
+            memory_features[batch_indices] = new_memory_features
 
-            new_memory_outputs = (1.0 - self.momentum) * memory_outputs
-            +self.momentum * outputs_target.clone()
+            memory_outputs[batch_indices] = new_memory_outputs
 
-        net.criterion__adapt_criterion.memory_features = new_memory_features
-        net.criterion__adapt_criterion.memory_outputs = new_memory_outputs
+        net.criterion__adapt_criterion.memory_features = memory_features
+        net.criterion__adapt_criterion.memory_outputs = memory_outputs
+
+
+class OnTrainBeginCallback(Callback):
+    """Callback that runs at the start of training."""
+
+    def on_train_begin(self, net, X=None, y=None):
+        """This method is called at the beginning of training.
+
+        Parameters
+        ----------
+        net (NeuralNet): The Skorch NeuralNet instance.
+        X (numpy.ndarray or None): The input data used for training. Only passed if
+            the `iterator_train` callback is not set.
+        y (numpy.ndarray or None): The target data used for training. Only passed if
+            the `iterator_train` callback is not set.
+        """
+        X, y_ = net._prepare_input(X)
+        y = y_ if y is None else y
+
+        # Take only first sample
+        X_sample = {key: X[key][0:2] for key in X.keys()}
+
+        # Disable gradient computation for feature extraction
+        with torch.no_grad():
+            features_sample = net.predict_features(X_sample)
+            pred_sample = net.predict_proba(X_sample, allow_source=True)
+
+        n_target_samples = X["X"][X["sample_domain"] < 0].shape[0]
+        n_features = features_sample.shape[1]
+
+        n_classes = pred_sample.shape[1]
+
+        net.criterion__adapt_criterion.memory_features = torch.rand(
+            (n_target_samples, n_features)
+        )
+        net.criterion__adapt_criterion.memory_outputs = torch.rand(
+            (n_target_samples, n_classes)
+        )

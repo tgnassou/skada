@@ -1,4 +1,5 @@
 # Author: Theo Gnassounou <theo.gnassounou@inria.fr>
+#         Yanis Lalou <yanis.lalou@polytechnique.edu>
 #
 # License: BSD 3-Clause
 
@@ -11,7 +12,7 @@ from skada.deep.base import (
     DomainAwareNet,
     DomainBalancedDataLoader,
 )
-from skada.deep.callbacks import ComputeMemoryBank
+from skada.deep.callbacks import ComputeMemoryBank, OnTrainBeginCallback
 from skada.deep.losses import gda_loss, nap_loss
 
 from .modules import DomainClassifier
@@ -95,10 +96,10 @@ class SPALoss(BaseDALoss):
 
         loss_gda = self.reg_gsa * gda_loss(features_s, features_t)
 
-        if self.memory_features is None:
-            self.memory_features = torch.rand_like(features_t)
-        if self.memory_outputs is None:
-            self.memory_outputs = torch.rand_like(y_pred_t)
+        # if self.memory_features is None:
+        #     self.memory_features = torch.rand_like(features_t)
+        # if self.memory_outputs is None:
+        #     self.memory_outputs = torch.rand_like(y_pred_t)
 
         loss_pl = self.reg_nap * nap_loss(
             features_s,
@@ -172,15 +173,14 @@ def SPA(
     if callbacks is None:
         callbacks = [
             ComputeMemoryBank(),
+            OnTrainBeginCallback(),
         ]
     else:
         if isinstance(callbacks, list):
             callbacks.append(ComputeMemoryBank())
+            callbacks.append(OnTrainBeginCallback())
         else:
-            callbacks = [
-                callbacks,
-                ComputeMemoryBank(),
-            ]
+            callbacks = [callbacks, ComputeMemoryBank(), OnTrainBeginCallback()]
     if base_criterion is None:
         base_criterion = torch.nn.CrossEntropyLoss()
 

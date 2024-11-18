@@ -419,6 +419,7 @@ class DomainAwareModule(torch.nn.Module):
         sample_weight=None,
         is_fit=False,
         return_features=False,
+        **kwargs,
     ):
         if is_fit:
             if sample_weight is not None:
@@ -644,7 +645,6 @@ class DomainAwareNet(NeuralNetClassifier, _DAMetadataRequesterMixin):
         """
         if not self.initialized_:
             self.initialize()
-
         X, _ = self._prepare_input(X, None)
         X, sample_domain = X["X"], X["sample_domain"]
         X = torch.tensor(X) if not torch.is_tensor(X) else X
@@ -784,23 +784,28 @@ class DomainAwareNet(NeuralNetClassifier, _DAMetadataRequesterMixin):
         Returns:
         --------
         dict
-            A dictionary containing 'X', 'sample_domain', and optionally 'y' and 'sample_weight' keys.
+            A dictionary containing 'X', 'sample_domain', 'indices' and optionally 'y' and 'sample_weight' keys.
         np.ndarray
             y as a numpy array.
-
-        Raises:
-        -------
-        ValueError
-            If the input format is invalid or missing required information.
         """
         if isinstance(X, dict):
             if "X" not in X or "sample_domain" not in X:
                 raise ValueError("X should contain both 'X' and 'sample_domain' keys.")
+            if "indices" not in X:
+                # Create separate indices for source and target domains
+                indices = self._create_indices(X["X"], X["sample_domain"])
+                X['indices'] = indices
             return X, None
         elif isinstance(X, Dataset):
             return self._process_dataset(X)
         else:
-            result = {"X": X, "sample_domain": sample_domain}
+            # Create separate indices for source and target domains
+            indices = self._create_indices(X, sample_domain)
+            result = {
+                "X": X, 
+                "sample_domain": sample_domain,
+                "indices": indices,
+            }
             if sample_weight is not None:
                 result["sample_weight"] = sample_weight
             return result, None
@@ -886,3 +891,19 @@ class DomainAwareNet(NeuralNetClassifier, _DAMetadataRequesterMixin):
             loss = sample_weight * loss
 
         return loss.mean()
+
+    def _create_indices(self, X, sample_domain):
+        if sample_domain is not None:
+                source_mask = sample_domain >= 0
+                target_mask = ~source_mask
+                
+                source_indices = np.arange(np.sum(source_mask))
+                target_indices = np.arange(np.sum(target_mask))
+                
+                indices = np.zeros(len(X), dtype=int)
+                indices[source_mask] = source_indices
+                indices[target_mask] = target_indices
+        else:
+            indices = None
+        
+        return indices
