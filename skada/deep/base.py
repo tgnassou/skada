@@ -169,6 +169,26 @@ class BaseDALoss(torch.nn.Module):
         """
         pass
 
+class DeepBaseSelector:
+    def __init__(self, module):
+        self.module = module
+    
+    def give_module(self):
+        return self.module
+
+class DeepShared(DeepBaseSelector):
+    def __init__(self, module):
+        super().__init__(module)
+
+class DeepPerDomain(DeepBaseSelector):
+    def __init__(self, module, domain_ids):
+        super().__init__(module)
+        self.domain_ids = domain_ids
+    
+    def give_module(self):
+        sources_ids = self.domain_ids[self.domain_ids >= 0]
+        return {s_id: self.module for s_id in sources_ids}
+
 
 class DomainAwareModule(torch.nn.Module):
     """Domain aware module
@@ -192,12 +212,26 @@ class DomainAwareModule(torch.nn.Module):
         self, base_module, layer_name, domain_classifier=None, is_multi_source=False, flatten_features=True
     ):
         super(DomainAwareModule, self).__init__()
-        self.base_module_ = base_module
+        self.base_module_ = self.init_module(base_module)
         self.domain_classifier_ = domain_classifier
         self.is_multi_source = is_multi_source
         self.layer_name = layer_name
         self.intermediate_layers = {}
         self._setup_hooks(flatten=flatten_features)
+
+
+    def init_module(self,base_module):
+        if isinstance(base_module,torch.nn.Module):
+            return base_module
+        else:
+            module=torch.nn.Sequential()
+            for mod in base_module:
+                if isinstance(mod, DeepBaseSelector):
+                    module.append(mod.give_module())
+                elif isinstance(mod,torch.nn.Module):
+                    module.append(mod)
+            return module
+
 
     def _setup_hooks(self, flatten=True):
         _register_forwards_hook(

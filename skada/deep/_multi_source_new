@@ -1,0 +1,219 @@
+# Author: Theo Gnassounou <theo.gnassounou@inria.fr>
+#
+# License: BSD 3-Clause
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from itertools import combinations
+
+from skada.deep.base import (
+    BaseDALoss,
+    DomainAwareCriterion,
+    DomainAwareModule,
+    DomainAwareNet,
+)
+from skada.deep.dataloaders import MultiSourceDomainBalancedDataLoader
+from skada.deep.losses import mmd_loss
+
+
+class SelectDomainModule(torch.nn.Module):
+    """Select domain module"""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, X, sample_domain=None, is_source=True):
+        if is_source:
+            X = X[sample_domain - 1, torch.arange(X.size(1))]
+        return X
+
+
+class MultiSourceModule(torch.nn.Module):
+    """Multi-source module
+
+    A multi-source module allowing domain-specific layers
+
+    Parameters
+    ----------
+    layers : list of torch modules (list)
+       list of the Module in the order.
+    domain_specific_layers : dict
+        A list of True or False saying if the layer should domain-specific or not.
+    n_source_domains : int
+        The number of domains.
+    """
+
+    def __init__(self, layers, domain_specific_layers, n_domains):
+        super().__init__()
+        for i, layer in enumerate(layers):
+            if domain_specific_layers[i]:
+                self.add_module(
+                    f"layer_{i}", nn.ModuleList(layer for _ in range(n_domains))
+                )
+                self.add_module(f"output_layer_{i}", SelectDomainModule())
+            else:
+                self.add_module(f"layer_{i}", layer)
+        self.n_domains = n_domains
+
+    def forward(self, X, sample_domain=None, sample_weight=None, is_source=True):
+        for i, layer in enumerate(self.children()):
+            if isinstance(layer, nn.ModuleList):
+                if X.size(0) != self.n_domains:
+                    X = [layer[j](X) for j in range(self.n_domains)]
+                else:
+                    X = [layer[j](X[j]) for j in range(self.n_domains)]
+                X = torch.stack(X, dim=0)
+            elif isinstance(layer, SelectDomainModule):
+                if is_source:
+                    X = layer(X, sample_domain)
+                else:
+                    X = layer(X, is_source=is_source)
+            else:
+                X = layer(X)
+        return X
+
+def moment_distance_1(features_s,features_t):
+    #distance entre les moments d'ordre 1
+    return torch.norm(torch.mean(features_s,1,True)-torch.mean(features_t,1,True))
+
+def moment_distance_2(features_s,features_t,N):
+    #distance entre les moments d'ordre 2 
+    cov_s=torch.cov(features_s)
+    cov_t=torch.cov(features_t)
+    return torch.norm(cov_s.diagonal()+moment_distance_1-cov_t.diagonal())
+
+
+
+class MFSANLoss(BaseDALoss):
+    """Loss MFSAN
+
+    The loss for the MFSAN method proposed in [33].
+
+
+    Parameters
+    ----------
+    reg_mmd : float, optional (default=1)
+        The regularization parameter of the MMD loss.
+    reg_cl : float, optional (default=1)
+        The regularization parameter of the target discrepancy
+        classification loss.
+    sigmas : array-like, optional (default=None)
+        The sigmas for the Gaussian kernel.
+
+    References
+    ----------
+    .. [33] Zhu, Y., Zhuang, F., and Wang, D., (2022).
+            Aligning Domain-specific Distribution and Classifier
+            for Cross-domain Classification from Multiple Sources.
+            Association for the Advancement of Artificial Intelligence.
+    """
+
+    def __init__(
+        self,
+        reg_mmd=1,
+        reg_cl=1,
+        sigmas=None,
+    ):
+        super().__init__()
+        self.reg_mmd = reg_mmd
+        self.reg_cl = reg_cl
+        self.sigmas = sigmas
+
+    def forward(
+        self,
+        y_s,
+        y_pred_s,
+        y_pred_t,
+        domain_pred_s,
+        domain_pred_t,
+        features_s,
+        features_t,
+        sample_domain,
+        trade_off
+    ):
+        """Compute the domain adaptation loss"""
+        source_idx = sample_domain > 0
+        domains = sample_domain.unique()
+        sources = domains[domains >= 0]
+        n_source = len(sources)
+        mmd = 0
+        disc = 0
+        coeff_binom=torch.exp(torch.lgamma(n_source+1)-torch.lgamma(n_source-2+1)-torch.lgamma(2+1))
+        
+        for source_id in sources:
+            source_id_sample = features_s[sample_domain[source_idx] == source_id]
+            mmd += (1/n_source)*moment_distance_1(
+                source_id_sample,
+                features_t
+            )
+        
+        for first_source, second_source in combinations(sources, r=2):
+                input1 = features_s[sample_domain[source_idx] == first_source]
+                input2 = features_s[sample_domain[source_idx] == second_source]
+                mmd += (1/coeff_binom)*moment_distance_1(input1, input2)
+
+#Unfinished, should be the loss function based on article "Moment Matching for Multi-Source Domain Adaptation",Xingchao Peng
+
+
+def MFSAN(
+    module,
+    layer_name,
+    source_domains,
+    reg_mmd=1,
+    reg_cl=1,
+    sigmas=None,
+    base_criterion=None,
+    **kwargs,
+):
+    """MFSAN domain adaptation method.
+
+    See [33]_.
+
+    Parameters
+    ----------
+    module : torch module (class or instance)
+        A PyTorch :class:`~torch.nn.Module`.
+    layer_name : str
+        The name of the module's layer whose outputs are
+        collected during the training for the adaptation.
+    source_domains : list of int
+        The list of source domains.
+    reg_mmd : float, optional (default=1)
+        The regularization parameter of the MMD loss.
+    reg_cl : float, optional (default=1)
+        The regularization parameter of the target discrepancy
+        classification loss.
+    sigmas : array-like, optional (default=None)
+        The sigmas for the Gaussian kernel.
+    base_criterion : torch criterion (class)
+        The base criterion used to compute the loss with source
+        labels. If None, the default is `torch.nn.CrossEntropyLoss`.
+
+    References
+    ----------
+    .. [33] Zhu, Y., Zhuang, F., and Wang, D., (2022).
+            Aligning Domain-specific Distribution and Classifier
+            for Cross-domain Classification from Multiple Sources.
+            Association for the Advancement of Artificial Intelligence.
+    """
+    if base_criterion is None:
+        base_criterion = torch.nn.CrossEntropyLoss()
+
+    net = DomainAwareNet(
+        module=DomainAwareModule,
+        module__base_module=module,
+        module__layer_name=layer_name,
+        module__is_multi_source=True,
+        module__flatten_features=False,
+        iterator_train=MultiSourceDomainBalancedDataLoader,
+        iterator_train__source_domains=source_domains,
+        criterion=DomainAwareCriterion,
+        criterion__base_criterion=base_criterion,
+        criterion__reg=1,
+        criterion__adapt_criterion=MFSANLoss(
+            reg_mmd=reg_mmd, reg_cl=reg_cl, sigmas=sigmas
+        ),
+        criterion__is_multi_source=True,
+        **kwargs,
+    )
+    return net
