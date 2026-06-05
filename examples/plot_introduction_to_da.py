@@ -34,20 +34,20 @@ use SKADA to perform DA on simple datasets.
 # like color, shape, texture, etc. Now one can give new example of pear and apple
 # and the model will be able to classify them correctly.
 #
-# .. image:: /_static/images/image_classif4.pdf
+# .. image:: /_static/images/image_classif4.png
 #    :width: 400px
 #    :align: center
 #
 # However, if we now want to classify images of pears and apples, that shifted
 # from the initial dataset like quickdraws:
 #
-# .. image:: /_static/images/image_classif5.pdf
+# .. image:: /_static/images/image_classif5.png
 #    :width: 400px
 #    :align: center
 #
 # or paintings:
 #
-# .. image:: /_static/images/image_classif6.pdf
+# .. image:: /_static/images/image_classif6.png
 #    :width: 400px
 #    :align: center
 #
@@ -56,7 +56,7 @@ use SKADA to perform DA on simple datasets.
 # or texture that were useful for classification in the original dataset may no
 # longer be effective in the new domains.
 #
-# .. image:: /_static/images/image_shift.pdf
+# .. image:: /_static/images/image_shift.png
 #    :width: 400px
 #    :align: center
 #
