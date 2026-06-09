@@ -229,3 +229,18 @@ def _shuffle_arrays(*arrays, random_state=None):
 
 def _route_params(request, params, caller):
     return request._route_params(params=params, parent=caller, caller=caller)
+
+
+def _get_routing_request(routing, method):
+    # New sklearn API
+    if getattr(routing, "_self_request", None) is not None:
+        self_request = routing._self_request
+
+        if hasattr(self_request, method):
+            return getattr(self_request, method)
+
+    # Old sklearn API
+    if hasattr(routing, method):
+        return getattr(routing, method)
+
+    raise AttributeError(f"No routing request found for method={method}")

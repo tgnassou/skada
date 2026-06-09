@@ -432,11 +432,10 @@ class DomainAwareModule(torch.nn.Module):
         X,
         sample_domain=None,
         sample_weight=None,
-        is_fit=False,
         return_features=False,
         sample_idx=None,
     ):
-        if is_fit:
+        if self.training:
             if sample_weight is not None:
                 y_pred = self.base_module_(X, sample_weight=sample_weight)
             else:
@@ -531,7 +530,7 @@ class DomainAwareNet(NeuralNetClassifier, _DAMetadataRequesterMixin):
             The fitted model.
         """
         X = self._prepare_input(X, y, sample_domain, sample_weight)
-        return super().fit(X, None, is_fit=True, **fit_params)
+        return super().fit(X, None, **fit_params)
 
     def predict(
         self,
@@ -1065,7 +1064,7 @@ class DeepDADataset(Dataset):
                 allow_nd=True,
                 ensure_min_samples=0,
                 ensure_min_features=0,
-                force_all_finite=not self.allow_label_masks,
+                ensure_all_finite=not self.allow_label_masks,
             )
             y = to_tensor(y, self.device)
             has_y = y != _NO_LABEL_
