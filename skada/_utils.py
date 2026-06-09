@@ -232,14 +232,12 @@ def _route_params(request, params, caller):
 
 
 def _get_routing_request(routing, method):
-    # New sklearn API
     if getattr(routing, "_self_request", None) is not None:
         self_request = routing._self_request
 
         if hasattr(self_request, method):
             return getattr(self_request, method)
 
-    # Old sklearn API
     if hasattr(routing, method):
         return getattr(routing, method)
 
