@@ -95,10 +95,6 @@ def test_generic_scorer(scorer, da_dataset):
     )
     estimator.fit(X.astype(np.float32), y, sample_domain=sample_domain)
 
-    shared = estimator.steps[-1][1]
-
-    print(shared.routing_)
-    print(dir(shared.routing_))
     cv = ShuffleSplit(n_splits=3, test_size=0.3, random_state=0)
     scores = cross_validate(
         estimator,
@@ -280,7 +276,6 @@ def test_mano_softmax(da_dataset):
 
     scorer = MaNoScorer(threshold=-1)
     scorer(estimator, X, y, sample_domain=sample_domain)
-    print(scorer.chosen_normalization.lower())
     assert (
         scorer.chosen_normalization.lower() == "softmax"
     ), "the wrong normalization was chosen"
