@@ -1,5 +1,27 @@
 # Releases
 
+## Skada v0.6.0
+
+Skada v0.6.0 Release Highlights
+
+## What's Changed
+
+### 🚀 New features
+
+* Added **gradual domain adaptation**, enabling progressive adaptation across domains (#354).
+* Introduced a **test-time adaptation API for shallow methods** (#345).
+
+### 🔧 Compatibility and bug fixes
+
+* Fixed issues related to the upcoming **scikit-learn 1.8** release, including test failures and API compatibility (#358, #363).
+
+## New Contributors
+
+* @flefebv made their first contribution in #354.
+* @glemaitre made their first contribution in #359.
+
+**Full Changelog**: https://github.com/scikit-adaptation/skada/compare/0.5.0...0.6.0
+
 ## Skada v0.5.0
 
 Skada v0.5.0 Release Highlights
