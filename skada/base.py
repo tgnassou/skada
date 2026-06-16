@@ -121,7 +121,12 @@ class BaseTestTimeAdapter(BaseAdapter):
     the `BaseAdapter` is that test-time adapters do not require fitting and
     can be used directly in the `transform` method.
     """
+    def __init__(self, auto_fit_new_domain=False):
+        super().__init__()
+        self.auto_fit_new_domain = auto_fit_new_domain
 
+
+    @abstractmethod
     def fit_new_domain(self, X, y=None, *, sample_domain=None, **params):
         """Fit the adapter to the new domain."""
         pass

@@ -596,12 +596,13 @@ class MultiLinearMongeAlignmentAdapter(BaseTestTimeAdapter):
     """
 
     def __init__(self, reg=1e-08, bias=True, auto_fit_new_domain=False):
-        super(BaseTestTimeAdapter, self).__init__()
+        super(BaseTestTimeAdapter, self).__init__(
+            auto_fit_new_domain=auto_fit_new_domain
+        )
         self.reg = reg
         self.bias = bias
-        self.auto_fit_new_domain = auto_fit_new_domain
 
-    def fit(self, X, y=None, *, sample_domain=None):
+    def fit(self, X, y=None, *, sample_domain=None, **params):
         """Fit adaptation parameters.
 
         Parameters
@@ -697,9 +698,11 @@ class MultiLinearMongeAlignmentAdapter(BaseTestTimeAdapter):
             if domain not in self.mappings_:
                 if self.auto_fit_new_domain:
                     print("Fitting new domain:", domain)
+                    X_domain = X[sample_domain == domain]
                     self.fit_new_domain(
-                        X[sample_domain == domain],
-                        sample_domain=np.array([domain] * X.shape[0]),
+                        X_domain,
+                        sample_domain=np.array([domain] * X_domain.shape[0]),
+                        **params,
                     )
                 else:
                     raise ValueError(
@@ -712,7 +715,7 @@ class MultiLinearMongeAlignmentAdapter(BaseTestTimeAdapter):
 
         return X_adapt
 
-    def fit_new_domain(self, X, y=None, *, sample_domain=None):
+    def fit_new_domain(self, X, y=None, *, sample_domain=None, **params):
         """Fit adaptation parameters for a new domain.
 
         Parameters
@@ -743,7 +746,7 @@ class MultiLinearMongeAlignmentAdapter(BaseTestTimeAdapter):
                 self.barycenter_[1],
             )
 
-        return
+        return self
 
 
 def MultiLinearMongeAlignment(
