@@ -596,9 +596,7 @@ class MultiLinearMongeAlignmentAdapter(BaseTestTimeAdapter):
     """
 
     def __init__(self, reg=1e-08, bias=True, auto_fit_new_domain=False):
-        super(BaseTestTimeAdapter, self).__init__(
-            auto_fit_new_domain=auto_fit_new_domain
-        )
+        super().__init__(auto_fit_new_domain=auto_fit_new_domain)
         self.reg = reg
         self.bias = bias
 
