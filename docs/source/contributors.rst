@@ -1,4 +1,4 @@
-Contributors
+SKADA Team
 ============
 
 .. container:: lead

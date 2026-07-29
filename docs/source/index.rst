@@ -72,7 +72,7 @@ Scikit Adaptation (SKA\ :brand-blue:`D`\ :brand-red:`A`\ )
    :hidden:
 
    Install <install>
-   User Guide <quickstart>
+   User Guide <auto_examples/plot_quick_start_guide>
    Examples <auto_examples/index>
    API Reference <all>
    Metrics <scorer>
